@@ -59,6 +59,8 @@ int throttle = 1000;
 float pitchBias = 0;
 float rollBias = 0;
 float yawBias = 0;
+float altitude = 0;
+float battery = 0;
 int lastCmdTime = 0;
 
 // PID graphs
@@ -115,21 +117,22 @@ void setup() {
 void setupUI() {
   cp5 = new ControlP5(this);
   cp5.setAutoDraw(false);
-  
-  // Pitch Controls
-  cp5.addTextfield("Kp_pitch").setPosition(50, 40).setSize(80, 25).setText(str(kp_pitch));
-  cp5.addTextfield("Ki_pitch").setPosition(50, 70).setSize(80, 25).setText(str(ki_pitch));
-  cp5.addTextfield("Kd_pitch").setPosition(50, 100).setSize(80, 25).setText(str(kd_pitch));
-  
-  // Roll Controls
-  cp5.addTextfield("Kp_roll").setPosition(140, 40).setSize(80, 25).setText(str(kp_roll));
-  cp5.addTextfield("Ki_roll").setPosition(140, 70).setSize(80, 25).setText(str(ki_roll));
-  cp5.addTextfield("Kd_roll").setPosition(140, 100).setSize(80, 25).setText(str(kd_roll));
-  
-  // Yaw Controls
-  cp5.addTextfield("Kp_yaw").setPosition(230, 40).setSize(80, 25).setText(str(kp_yaw));
-  cp5.addTextfield("Ki_yaw").setPosition(230, 70).setSize(80, 25).setText(str(ki_yaw));
-  cp5.addTextfield("Kd_yaw").setPosition(230, 100).setSize(80, 25).setText(str(kd_yaw));
+
+  // PID Controls
+  String[] axes = {"pitch", "roll", "yaw"};
+  float[] xs = {50, 140, 230};
+  float[][] pidVals = {
+    {kp_pitch, ki_pitch, kd_pitch},
+    {kp_roll, ki_roll, kd_roll},
+    {kp_yaw, ki_yaw, kd_yaw}
+  };
+  for (int i = 0; i < axes.length; i++) {
+    String axis = axes[i];
+    float x = xs[i];
+    cp5.addTextfield("Kp_" + axis).setPosition(x, 40).setSize(80, 25).setText(str(pidVals[i][0]));
+    cp5.addTextfield("Ki_" + axis).setPosition(x, 70).setSize(80, 25).setText(str(pidVals[i][1]));
+    cp5.addTextfield("Kd_" + axis).setPosition(x, 100).setSize(80, 25).setText(str(pidVals[i][2]));
+  }
   
 
   // Buttons
@@ -392,17 +395,29 @@ void draw2DGUI() {
   text("Roll PID", 139-30, 29);
   text("Yaw PID", 229-30, 29);
   text("Telemetry:", 400-30, 60);
-  text("Pitch: " + nf(pitch, 0, 2) + "°", 400-30, 80);
-  text("Roll: " + nf(roll, 0, 2) + "°", 400-30, 100);
-  text("Yaw: " + nf(yaw, 0, 2) + "°", 400-30, 120);
-  text("Throttle: " + throttle, 400-30, 140);
-  text("Pitch Corr: " + nf(pitchCorr, 0, 2), 400-30, 160);
-  text("Roll Corr: " + nf(rollCorr, 0, 2), 400-30, 180);
-  text("Yaw Corr: " + nf(yawCorr, 0, 2), 400-30, 200);
-  text("Pitch Bias: " + nf(pitchBias, 0, 2), 400-30, 220);
-  text("Roll Bias: " + nf(rollBias, 0, 2), 400-30, 240);
-  text("Yaw Bias: " + nf(yawBias, 0, 2), 400-30, 260);
-  text("Last Cmd: " + lastCmdTime + "ms", 400-30, 280);
+  String[] labels = {
+    "Pitch", "Roll", "Yaw", "Throttle", "Pitch Corr", "Roll Corr",
+    "Yaw Corr", "Pitch Bias", "Roll Bias", "Yaw Bias",
+    "Altitude", "Battery", "Last Cmd"
+  };
+  String[] values = {
+    nf(pitch, 0, 2) + "°",
+    nf(roll, 0, 2) + "°",
+    nf(yaw, 0, 2) + "°",
+    str(throttle),
+    nf(pitchCorr, 0, 2),
+    nf(rollCorr, 0, 2),
+    nf(yawCorr, 0, 2),
+    nf(pitchBias, 0, 2),
+    nf(rollBias, 0, 2),
+    nf(yawBias, 0, 2),
+    nf(altitude, 0, 2),
+    nf(battery, 0, 2) + "%",
+    lastCmdTime + "ms"
+  };
+  for (int i = 0; i < labels.length; i++) {
+    text(labels[i] + ": " + values[i], 400-30, 80 + i * 20);
+  }
   
   // Command line label
   fill(255);
@@ -738,7 +753,7 @@ void handleIncomingLine(String line) {
 }
 
 void parseTelemetryData(String line) {
-  // New format: DB:pitch roll yaw pitchCorr rollCorr yawCorr throttle pitchBias rollBias yawBias lastCmdTime
+  // Format: DB:pitch roll yaw pitchCorr rollCorr yawCorr throttle pitchBias rollBias yawBias lastCmdTime [altitude battery]
   line = line.substring(3).trim();
   String[] parts = split(line, ' ');
   if (parts.length >= 11) {
@@ -754,6 +769,10 @@ void parseTelemetryData(String line) {
       rollBias = float(parts[8]);
       yawBias = float(parts[9]);
       lastCmdTime = int(parts[10]);
+      if (parts.length >= 13) {
+        altitude = float(parts[11]);
+        battery = float(parts[12]);
+      }
     } catch (NumberFormatException e) {
       println("Parse error in telemetry: " + e.getMessage());
     }
