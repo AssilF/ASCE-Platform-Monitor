@@ -40,10 +40,18 @@ boolean[] graphEnabled = {true, true, true, false, false, false};
 // Recording
 boolean isRecording = false;
 HashMap<String, PrintWriter> dataWriters = new HashMap<String, PrintWriter>();
-String[] dataCategories = {
-  "pitch", "roll", "yaw", "pitchCorr", "rollCorr", "yawCorr",
-  "throttle", "pitchBias", "rollBias", "yawBias", "altitude",
-  "battery", "lastCmdTime"
+// Each sub-array starts with the file name followed by the data fields
+String[][] dataGroups = {
+  {
+    "attitude",
+    "pitch", "roll", "yaw",
+    "pitchCorr", "rollCorr", "yawCorr",
+    "pitchBias", "rollBias", "yawBias"
+  },
+  {
+    "misc",
+    "throttle", "altitude", "battery", "lastCmdTime"
+  }
 };
 
 // UI
@@ -838,16 +846,35 @@ void parseYawFilter(String line) {
 
 // Recording helpers
 void startRecording() {
-  File dir = new File(sketchPath("logs"));
-  if (!dir.exists()) {
-    dir.mkdirs();
+  File logsRoot = new File(sketchPath("logs"));
+  if (!logsRoot.exists()) {
+    logsRoot.mkdirs();
   }
-  for (String c : dataCategories) {
+
+  int idx = 1;
+  File dir;
+  while (true) {
+    dir = new File(logsRoot, "recording_" + idx);
+    if (!dir.exists()) {
+      dir.mkdirs();
+      break;
+    }
+    idx++;
+  }
+
+  for (String[] group : dataGroups) {
+    String groupName = group[0];
     try {
-      PrintWriter w = createWriter(new File(dir, c + ".csv").getAbsolutePath());
-      dataWriters.put(c, w);
+      File file = new File(dir, groupName + ".csv");
+      PrintWriter w = createWriter(file.getAbsolutePath());
+      String header = "time";
+      for (int i = 1; i < group.length; i++) {
+        header += "," + group[i];
+      }
+      w.println(header);
+      dataWriters.put(groupName, w);
     } catch (Exception e) {
-      println("Could not create writer for " + c + ": " + e.getMessage());
+      println("Could not create writer for " + groupName + ": " + e.getMessage());
     }
   }
 }
@@ -862,19 +889,15 @@ void stopRecording() {
 
 void logTelemetry() {
   long t = millis();
-  if (dataWriters.get("pitch") != null) dataWriters.get("pitch").println(t + "," + pitch);
-  if (dataWriters.get("roll") != null) dataWriters.get("roll").println(t + "," + roll);
-  if (dataWriters.get("yaw") != null) dataWriters.get("yaw").println(t + "," + yaw);
-  if (dataWriters.get("pitchCorr") != null) dataWriters.get("pitchCorr").println(t + "," + pitchCorr);
-  if (dataWriters.get("rollCorr") != null) dataWriters.get("rollCorr").println(t + "," + rollCorr);
-  if (dataWriters.get("yawCorr") != null) dataWriters.get("yawCorr").println(t + "," + yawCorr);
-  if (dataWriters.get("throttle") != null) dataWriters.get("throttle").println(t + "," + throttle);
-  if (dataWriters.get("pitchBias") != null) dataWriters.get("pitchBias").println(t + "," + pitchBias);
-  if (dataWriters.get("rollBias") != null) dataWriters.get("rollBias").println(t + "," + rollBias);
-  if (dataWriters.get("yawBias") != null) dataWriters.get("yawBias").println(t + "," + yawBias);
-  if (dataWriters.get("altitude") != null) dataWriters.get("altitude").println(t + "," + altitude);
-  if (dataWriters.get("battery") != null) dataWriters.get("battery").println(t + "," + battery);
-  if (dataWriters.get("lastCmdTime") != null) dataWriters.get("lastCmdTime").println(t + "," + lastCmdTime);
+  PrintWriter w;
+  if ((w = dataWriters.get("attitude")) != null) {
+    w.println(t + "," + pitch + "," + roll + "," + yaw + "," +
+      pitchCorr + "," + rollCorr + "," + yawCorr + "," +
+      pitchBias + "," + rollBias + "," + yawBias);
+  }
+  if ((w = dataWriters.get("misc")) != null) {
+    w.println(t + "," + throttle + "," + altitude + "," + battery + "," + lastCmdTime);
+  }
 }
 
 void parsePitchPID(String line) {
