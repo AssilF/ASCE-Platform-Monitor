@@ -4,6 +4,7 @@ import controlP5.*;
 import java.net.*;
 import java.io.*;
 import java.util.Arrays;
+import java.util.HashMap;
 import ddf.minim.*;
 import ddf.minim.analysis.*;
 
@@ -13,7 +14,7 @@ Slider yawKp, yawKi, yawKd;
 Slider pitchFilterFreq, pitchFilterQ;
 Slider rollFilterFreq, rollFilterQ;
 Slider yawFilterFreq, yawFilterQ;
-Button resetButton, armButton, disarmButton, sendFilters;
+Button resetButton, armButton, disarmButton, sendFilters, recordButton;
 
 
 Minim minim;
@@ -35,6 +36,15 @@ boolean isConnected = false;
 Thread tcpReaderThread;
 boolean keepReading = true;
 boolean[] graphEnabled = {true, true, true, false, false, false};
+
+// Recording
+boolean isRecording = false;
+HashMap<String, PrintWriter> dataWriters = new HashMap<String, PrintWriter>();
+String[] dataCategories = {
+  "pitch", "roll", "yaw", "pitchCorr", "rollCorr", "yawCorr",
+  "throttle", "pitchBias", "rollBias", "yawBias", "altitude",
+  "battery", "lastCmdTime"
+};
 
 // UI
 ControlP5 cp5;
@@ -144,6 +154,8 @@ void setupUI() {
   armButton = cp5.addButton("Arm").setPosition(120, 175).setSize(60, 30);
   disarmButton = cp5.addButton("Disarm").setPosition(190, 175).setSize(60, 30);
   sendFilters =cp5.addButton("Send Filters").setPosition(260, 175).setSize(60, 30);
+  recordButton = cp5.addButton("Record").setPosition(330, 175).setSize(60, 30)
+                              .setColorBackground(color(255, 0, 0));
   
   // Graph Toggle Checkboxes
   cp5.addCheckBox("GraphToggles")
@@ -777,6 +789,9 @@ void parseTelemetryData(String line) {
       println("Parse error in telemetry: " + e.getMessage());
     }
   }
+  if (isRecording) {
+    logTelemetry();
+  }
 }
 
 void parsePitchFilter(String line) {
@@ -819,6 +834,47 @@ void parseYawFilter(String line) {
       println("Failed to parse Yaw Filter: " + e.getMessage());
     }
   }
+}
+
+// Recording helpers
+void startRecording() {
+  File dir = new File(sketchPath("logs"));
+  if (!dir.exists()) {
+    dir.mkdirs();
+  }
+  for (String c : dataCategories) {
+    try {
+      PrintWriter w = createWriter(new File(dir, c + ".csv").getAbsolutePath());
+      dataWriters.put(c, w);
+    } catch (Exception e) {
+      println("Could not create writer for " + c + ": " + e.getMessage());
+    }
+  }
+}
+
+void stopRecording() {
+  for (PrintWriter w : dataWriters.values()) {
+    w.flush();
+    w.close();
+  }
+  dataWriters.clear();
+}
+
+void logTelemetry() {
+  long t = millis();
+  if (dataWriters.get("pitch") != null) dataWriters.get("pitch").println(t + "," + pitch);
+  if (dataWriters.get("roll") != null) dataWriters.get("roll").println(t + "," + roll);
+  if (dataWriters.get("yaw") != null) dataWriters.get("yaw").println(t + "," + yaw);
+  if (dataWriters.get("pitchCorr") != null) dataWriters.get("pitchCorr").println(t + "," + pitchCorr);
+  if (dataWriters.get("rollCorr") != null) dataWriters.get("rollCorr").println(t + "," + rollCorr);
+  if (dataWriters.get("yawCorr") != null) dataWriters.get("yawCorr").println(t + "," + yawCorr);
+  if (dataWriters.get("throttle") != null) dataWriters.get("throttle").println(t + "," + throttle);
+  if (dataWriters.get("pitchBias") != null) dataWriters.get("pitchBias").println(t + "," + pitchBias);
+  if (dataWriters.get("rollBias") != null) dataWriters.get("rollBias").println(t + "," + rollBias);
+  if (dataWriters.get("yawBias") != null) dataWriters.get("yawBias").println(t + "," + yawBias);
+  if (dataWriters.get("altitude") != null) dataWriters.get("altitude").println(t + "," + altitude);
+  if (dataWriters.get("battery") != null) dataWriters.get("battery").println(t + "," + battery);
+  if (dataWriters.get("lastCmdTime") != null) dataWriters.get("lastCmdTime").println(t + "," + lastCmdTime);
 }
 
 void parsePitchPID(String line) {
@@ -927,6 +983,19 @@ void Connect() {
 
 void Reset() {
   resetDrone();
+}
+
+void Record() {
+  isRecording = !isRecording;
+  if (isRecording) {
+    startRecording();
+    recordButton.setLabel("Stop");
+    recordButton.setColorBackground(color(0, 200, 0));
+  } else {
+    stopRecording();
+    recordButton.setLabel("Record");
+    recordButton.setColorBackground(color(255, 0, 0));
+  }
 }
 
 void SendCommand() {
@@ -1258,6 +1327,7 @@ void keyPressed() {
 
 // Cleanup on exit
 void exit() {
+  stopRecording();
   disconnect();
   if (minim != null) {
     minim.stop();
